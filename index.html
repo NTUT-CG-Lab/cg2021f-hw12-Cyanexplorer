@@ -53,10 +53,12 @@
     import {VolumeRenderShader1} from './three/examples/jsm/shaders/VolumeShader.js';
 
     let renderer, scene, camera, controls, material, volconfig, cmtextures;
+    let meshGroup = []
 
-    let modelPath = './data/nrrd_data/ID00423637202312137826377_gt_mask.nrrd';
+    let pModelPath = './data/nrrd_data/ID00423637202312137826377_mask.nrrd';
+    let gModelPath = './data/nrrd_data/ID00423637202312137826377_gt_mask.nrrd';
 
-    volconfig = {clim1: 0, clim2: 1, renderstyle: 'iso', isothreshold: 0.15, colormap: 'red'};
+    volconfig = {clim1: 0, clim2: 1, renderstyle: 'iso', isothreshold: 0.15, colormap:['orange', 'red']};
 
     init();
 
@@ -70,7 +72,13 @@
         createControl();
 
         // Load the data ...
-        loadNRRD(modelPath);
+        loadNRRD(pModelPath, 0, (mesh)=>{
+            meshGroup.push(mesh)
+        });
+
+        loadNRRD(gModelPath, 1, (mesh)=>{
+            meshGroup.push(mesh)
+        });
 
         window.addEventListener('resize', onWindowResize);
     }
@@ -78,7 +86,7 @@
     function createCamera() {
         // Create camera (The volume renderer does not work very well with perspective yet)
         const h = 512; // frustum height
-        const aspect = window.innerWidth / window.innerHeight;
+        const aspect = window.innerWidth / 2 / window.innerHeight;
         camera = new THREE.OrthographicCamera(-h * aspect / 2, h * aspect / 2, h / 2, -h / 2, 1, 1000);
         camera.position.set(64, -64, 128);
         camera.up.set(0, 0, 1); // In our data, z is up
@@ -102,8 +110,8 @@
         controls.update();
     }
 
-    function loadNRRD(modelPath) {
-        new NRRDLoader().load(modelPath, function (volume) {
+    function loadNRRD(modelPath, index, onload) {
+        let process = function (volume) {
             const texture = new THREE.DataTexture3D(volume.data, volume.xLength, volume.yLength, volume.zLength);
             texture.format = THREE.RedFormat;
             texture.type = THREE.FloatType;
@@ -112,7 +120,8 @@
 
             // Colormap textures
             cmtextures = {
-                red: new THREE.TextureLoader().load('./three/examples/textures/red.png', render)
+                red: new THREE.TextureLoader().load('./three/examples/textures/red.png', render),
+                orange: new THREE.TextureLoader().load('./three/examples/textures/orange.png', render)
             };
 
             // Material
@@ -125,7 +134,7 @@
             uniforms["u_clim"].value.set(volconfig.clim1, volconfig.clim2);
             uniforms["u_renderstyle"].value = 1; // 1: ISO
             uniforms["u_renderthreshold"].value = volconfig.isothreshold; // For ISO renderstyle
-            uniforms["u_cmdata"].value = cmtextures[volconfig.colormap];
+            uniforms["u_cmdata"].value = cmtextures[volconfig.colormap[index]];
 
             material = new THREE.ShaderMaterial({
                 uniforms: uniforms,
@@ -139,10 +148,15 @@
             geometry.translate(volume.xLength / 2 - 0.5, volume.yLength / 2 - 0.5, volume.zLength / 2 - 0.5);
 
             const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, 0, 0)
             scene.add(mesh);
 
+            onload(mesh)
+
             render();
-        });
+        }
+
+        new NRRDLoader().load(modelPath, process);
     }
 
     function updateUniforms() {
@@ -155,7 +169,7 @@
 
     function onWindowResize() {
         renderer.setSize(window.innerWidth, window.innerHeight);
-        const aspect = window.innerWidth / window.innerHeight;
+        const aspect = window.innerWidth / 2 / window.innerHeight;
         const frustumHeight = camera.top - camera.bottom;
         camera.left = -frustumHeight * aspect / 2;
         camera.right = frustumHeight * aspect / 2;
@@ -164,7 +178,27 @@
     }
 
     function render() {
+        if(meshGroup.length < 2){
+            return
+        }
+
+        meshGroup[0].visible = true
+        meshGroup[1].visible = false
+        renderer.setViewport(0, 0, window.innerWidth / 2, window.innerHeight)
+        renderer.setScissor(0, 0, window.innerWidth / 2, window.innerHeight);
+		renderer.setScissorTest( true );
+		//renderer.setClearColor( '#FF0000' );
+
         renderer.render(scene, camera);
+
+        meshGroup[0].visible = false
+        meshGroup[1].visible = true
+        renderer.setViewport(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight)
+        renderer.setScissor(window.innerWidth / 2, 0, window.innerWidth / 2, window.innerHeight)
+		renderer.setScissorTest( true )
+		//renderer.setClearColor( '#0000FF' );
+
+        renderer.render(scene, camera)
     }
 
 </script>
